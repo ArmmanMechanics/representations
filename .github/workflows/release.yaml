@@ -1,6 +1,6 @@
 on:
   workflow_dispatch:
-      inputs:
+    inputs:
       only:
         description: 'Specific image name to build'
         type: string

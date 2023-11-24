@@ -85,6 +85,7 @@ jobs:
 
       - name: Terraform apply
         env:
+          TF_LOG: DEBUG
           TF_VAR_target_repository: cgr.dev/chainguard
           TF_APKO_DISABLE_VERSION_TAGS: true  # Disable creating new version tags.
         run: |
@@ -94,7 +95,7 @@ jobs:
           echo ::group::terraform init
           terraform init
           echo ::endgroup::
-          terraform apply -auto-approve "-target=module.${{ matrix.imageName }}" -json | tee /tmp/${{ matrix.imageName }}.tf.json | jq -r '.["@message"]'
+          terraform apply -auto-approve "-target=module.${{ matrix.imageName }}"
 
       # - name: Collect TF diagnostics and upload
       #   if: ${{ always() }}

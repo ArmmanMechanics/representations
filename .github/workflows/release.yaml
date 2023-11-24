@@ -1,96 +1,24 @@
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - README.md
-      - withdrawn-images.txt
-      - withdrawn-repos.txt
-  schedule:
-    - cron: '0 0 * * *'
   workflow_dispatch:
-    inputs:
+      inputs:
       only:
         description: 'Specific image name to build'
         type: string
-        required: false
-        default: ''
-concurrency: release
+        required: true
 jobs:
-  generate-matrix:
-    runs-on: ubuntu-latest
-    outputs:
-      shard-0: ${{ steps.generate-matrix-0.outputs.matrix }}
-      unique-images-shard-0: ${{ steps.generate-matrix-0.outputs.matrix-unique-images }}
-    steps:
-    - uses: actions/checkout@v4 # v3.5.2
-    # On push to main branch, only build images necessary
-    - id: files
-      if: ${{ github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' }}
-      uses: tj-actions/changed-files@408093d9ff9c134c33b974e0722ce06b9d6e8263 # v39.2.2
-      with:
-        separator: ','
-
-    - id: build-filter
-      run: |
-        set -xe
-        TMP=$(mktemp)
-
-        # For manual builds, build only the image requested
-        [[ "${{ github.event_name }}" != "workflow_dispatch" || "${{ inputs.only }}" == "" ]] || echo -n 'images/${{ inputs.only }}/image.yaml' > "${TMP}"
-
-        # On push to main branch, only build images necessary
-        [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]] || echo -n '${{ steps.files.outputs.all_changed_files }}' > "${TMP}"
-
-        echo "filter=$(cat "${TMP}")" >> $GITHUB_OUTPUT
-
-    - id: generate-matrix-0
-      uses: ./.github/actions/generate-matrix
-      with:
-        shard: 0
-        sharding-factor: 1
-        modified-files: ${{ steps.build-filter.outputs.filter }}
-
   build-0:
     runs-on: ubuntu-latest
-    needs: [generate-matrix]
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.generate-matrix.outputs.shard-0) }}
     permissions:
       id-token: write
       packages: write
       contents: read
       actions: read
     steps:
-      # In some cases, we runs out of disk space during tests, so this hack frees up approx 10G.
-      # See the following issue for more info: https://github.com/actions/runner-images/issues/2840#issuecomment-1284059930
-      - name: Free up runner disk space
-        run: |
-          set -x
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-
-      - uses: actions/checkout@v4 # v3.5.2
 
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: '1.3.*'
           terraform_wrapper: false
-      # Make cosign/crane CLI available to the tests
-      - uses: sigstore/cosign-installer@v3.1.0
-      - uses: imjasonh/setup-crane@v0.3
-
-      - uses: chainguard-dev/actions/setup-chainctl@main
-        with:
-          # This allows chainguard-images/images to publish images to cgr.dev/chainguard
-          # We maintain this identity here:
-          # https://github.com/chainguard-dev/mono/blob/main/env/chainguard-images/iac/images-pusher.tf
-          identity: 720909c9f5279097d847ad02a2f24ba8f59de36a/b6461e99e132298f
-
-      - uses: chainguard-dev/actions/setup-k3d@main
-        with:
-          k3s-image: cgr.dev/chainguard/k3s:latest@sha256:5bf7e7eebcff66a03f360511155b90732dd2b9ebcf4079bbf0c3d9501d717ddc
 
       - name: Terraform apply
         env:
@@ -103,46 +31,5 @@ jobs:
           echo ::group::terraform init
           terraform init
           echo ::endgroup::
-          terraform apply -auto-approve "-target=module.${{ matrix.imageName }}" -json | tee /tmp/${{ matrix.imageName }}.tf.json | jq -r '.["@message"]'
+          terraform apply -auto-approve "-target=module.${{ inputs.only }}"
 
-      - name: Collect TF diagnostics and upload
-        if: ${{ always() }}
-        id: tf-diag
-        uses: chainguard-dev/actions/terraform-diag@main
-        with:
-          json-file: /tmp/${{ matrix.imageName }}.tf.json
-
-      - name: Collect K8s diagnostics and upload
-        if: ${{ failure() }}
-        uses: chainguard-dev/actions/k8s-diag@main
-        with:
-          cluster-type: k3d
-
-      - name: Upload terraform logs
-        if: always()
-        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3
-        with:
-          name: ${{ matrix.imageName }}.tf.json
-          path: /tmp/${{ matrix.imageName }}.tf.json
-
-      - name: Touch actions file to prevent postrun failure
-        if: always()
-        run: |
-          set -x && [[ -f .github/actions/release-image/action.yml ]] || ( \
-            mkdir -p .github/actions/release-image/ && echo 'runs: {using: composite, steps: []}' > .github/actions/release-image/action.yml )
-
-      - uses: rtCamp/action-slack-notify@v2.2.1
-        if: ${{ failure() && github.event_name == 'schedule' }}
-        env:
-          SLACK_ICON: http://github.com/chainguard-dev.png?size=48
-          SLACK_USERNAME: guardian
-          SLACK_WEBHOOK: ${{ secrets.DISTROLESS_SLACK_WEBHOOK }}
-          SLACK_MSG_AUTHOR: chainguardian
-          SLACK_CHANNEL: chainguard-images-alerts
-          SLACK_COLOR: '#8E1600'
-          MSG_MINIMAL: 'true'
-          SLACK_TITLE: '[images] release failed ${{ matrix.imageName }}'
-          SLACK_MESSAGE: |
-            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-            ${{ steps.tf-diag.outputs.errors }}

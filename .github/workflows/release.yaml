@@ -72,12 +72,12 @@ jobs:
       - uses: sigstore/cosign-installer@v3.1.0
       - uses: imjasonh/setup-crane@v0.3
 
-      - uses: chainguard-dev/actions/setup-chainctl@main
-        with:
-          # This allows chainguard-images/images to publish images to cgr.dev/chainguard
-          # We maintain this identity here:
-          # https://github.com/chainguard-dev/mono/blob/main/env/chainguard-images/iac/images-pusher.tf
-          identity: 720909c9f5279097d847ad02a2f24ba8f59de36a/b6461e99e132298f
+      # - uses: chainguard-dev/actions/setup-chainctl@main
+      #   with:
+      #     # This allows chainguard-images/images to publish images to cgr.dev/chainguard
+      #     # We maintain this identity here:
+      #     # https://github.com/chainguard-dev/mono/blob/main/env/chainguard-images/iac/images-pusher.tf
+      #     identity: 720909c9f5279097d847ad02a2f24ba8f59de36a/b6461e99e132298f
 
       - uses: chainguard-dev/actions/setup-k3d@main
         with:
@@ -96,44 +96,44 @@ jobs:
           echo ::endgroup::
           terraform apply -auto-approve "-target=module.${{ matrix.imageName }}" -json | tee /tmp/${{ matrix.imageName }}.tf.json | jq -r '.["@message"]'
 
-      - name: Collect TF diagnostics and upload
-        if: ${{ always() }}
-        id: tf-diag
-        uses: chainguard-dev/actions/terraform-diag@main
-        with:
-          json-file: /tmp/${{ matrix.imageName }}.tf.json
+      # - name: Collect TF diagnostics and upload
+      #   if: ${{ always() }}
+      #   id: tf-diag
+      #   uses: chainguard-dev/actions/terraform-diag@main
+      #   with:
+      #     json-file: /tmp/${{ matrix.imageName }}.tf.json
 
-      - name: Collect K8s diagnostics and upload
-        if: ${{ failure() }}
-        uses: chainguard-dev/actions/k8s-diag@main
-        with:
-          cluster-type: k3d
+      # - name: Collect K8s diagnostics and upload
+      #   if: ${{ failure() }}
+      #   uses: chainguard-dev/actions/k8s-diag@main
+      #   with:
+      #     cluster-type: k3d
 
-      - name: Upload terraform logs
-        if: always()
-        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3
-        with:
-          name: ${{ matrix.imageName }}.tf.json
-          path: /tmp/${{ matrix.imageName }}.tf.json
+      # - name: Upload terraform logs
+      #   if: always()
+      #   uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3
+      #   with:
+      #     name: ${{ matrix.imageName }}.tf.json
+      #     path: /tmp/${{ matrix.imageName }}.tf.json
 
-      - name: Touch actions file to prevent postrun failure
-        if: always()
-        run: |
-          set -x && [[ -f .github/actions/release-image/action.yml ]] || ( \
-            mkdir -p .github/actions/release-image/ && echo 'runs: {using: composite, steps: []}' > .github/actions/release-image/action.yml )
+      # - name: Touch actions file to prevent postrun failure
+      #   if: always()
+      #   run: |
+      #     set -x && [[ -f .github/actions/release-image/action.yml ]] || ( \
+      #       mkdir -p .github/actions/release-image/ && echo 'runs: {using: composite, steps: []}' > .github/actions/release-image/action.yml )
 
-      - uses: rtCamp/action-slack-notify@v2.2.1
-        if: ${{ failure() && github.event_name == 'schedule' }}
-        env:
-          SLACK_ICON: http://github.com/chainguard-dev.png?size=48
-          SLACK_USERNAME: guardian
-          SLACK_WEBHOOK: ${{ secrets.DISTROLESS_SLACK_WEBHOOK }}
-          SLACK_MSG_AUTHOR: chainguardian
-          SLACK_CHANNEL: chainguard-images-alerts
-          SLACK_COLOR: '#8E1600'
-          MSG_MINIMAL: 'true'
-          SLACK_TITLE: '[images] release failed ${{ matrix.imageName }}'
-          SLACK_MESSAGE: |
-            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # - uses: rtCamp/action-slack-notify@v2.2.1
+      #   if: ${{ failure() && github.event_name == 'schedule' }}
+      #   env:
+      #     SLACK_ICON: http://github.com/chainguard-dev.png?size=48
+      #     SLACK_USERNAME: guardian
+      #     SLACK_WEBHOOK: ${{ secrets.DISTROLESS_SLACK_WEBHOOK }}
+      #     SLACK_MSG_AUTHOR: chainguardian
+      #     SLACK_CHANNEL: chainguard-images-alerts
+      #     SLACK_COLOR: '#8E1600'
+      #     MSG_MINIMAL: 'true'
+      #     SLACK_TITLE: '[images] release failed ${{ matrix.imageName }}'
+      #     SLACK_MESSAGE: |
+      #       https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-            ${{ steps.tf-diag.outputs.errors }}
+      #       ${{ steps.tf-diag.outputs.errors }}

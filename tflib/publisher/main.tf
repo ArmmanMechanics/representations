@@ -6,7 +6,7 @@ terraform {
     }
     scribble = {
       source = "ArmmanMechanics/scribble"
-      version = "0.0.3"
+      version = "0.0.4"
     }
     apko = {
       source  = "chainguard-dev/apko"

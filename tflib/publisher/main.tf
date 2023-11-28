@@ -4,6 +4,10 @@ terraform {
       source  = "chainguard-dev/cosign"
       version = "0.0.17"
     }
+    scribble = {
+      source = "ArmmanMechanics/scribble"
+      version = "0.0.3"
+    }
     apko = {
       source  = "chainguard-dev/apko"
       version = "0.11.0"
@@ -13,6 +17,10 @@ terraform {
       version = "0.0.10"
     }
   }
+}
+
+provider "scribble" {
+  # Configuration options
 }
 
 variable "target_repository" {
